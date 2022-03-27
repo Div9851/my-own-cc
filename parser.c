@@ -62,7 +62,15 @@ Obj *new_lvar(char *name) {
     return var;
 }
 
-Node *stmt(Token **rest, Token *tok) { return expr_stmt(rest, tok); }
+Node *stmt(Token **rest, Token *tok) {
+    if (equal(tok, "return")) {
+        Node *node = new_unary(ND_RETURN, expr(&tok, tok->next));
+        *rest = skip(tok, ";");
+        return node;
+    }
+
+    return expr_stmt(rest, tok);
+}
 
 Node *expr_stmt(Token **rest, Token *tok) {
     Node *node = new_unary(ND_EXPR_STMT, expr(&tok, tok));
