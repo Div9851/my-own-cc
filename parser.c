@@ -1,6 +1,8 @@
 #include "mcc.h"
 
 Node *expr(Token **rest, Token *tok);
+Node *expr_stmt(Token **rest, Token *tok);
+Node *assign(Token **rest, Token *tok);
 Node *equality(Token **rest, Token *tok);
 Node *relational(Token **rest, Token *tok);
 Node *add(Token **rest, Token *tok);
@@ -33,7 +35,29 @@ Node *new_num(int val) {
     return node;
 }
 
-Node *expr(Token **rest, Token *tok) { return equality(rest, tok); }
+Node *new_var_node(char name) {
+    Node *node = new_node(ND_VAR);
+    node->name = name;
+    return node;
+}
+
+Node *stmt(Token **rest, Token *tok) { return expr_stmt(rest, tok); }
+
+Node *expr_stmt(Token **rest, Token *tok) {
+    Node *node = new_unary(ND_EXPR_STMT, expr(&tok, tok));
+    *rest = skip(tok, ";");
+    return node;
+}
+
+Node *expr(Token **rest, Token *tok) { return assign(rest, tok); }
+
+Node *assign(Token **rest, Token *tok) {
+    Node *node = equality(&tok, tok);
+    if (equal(tok, "="))
+        node = new_binary(ND_ASSIGN, node, assign(&tok, tok->next));
+    *rest = tok;
+    return node;
+}
 
 Node *equality(Token **rest, Token *tok) {
     Node *node = relational(&tok, tok);
@@ -132,7 +156,13 @@ Node *unary(Token **rest, Token *tok) {
 Node *primary(Token **rest, Token *tok) {
     if (equal(tok, "(")) {
         Node *node = expr(&tok, tok->next);
-        *rest = consume(tok, ")");
+        *rest = skip(tok, ")");
+        return node;
+    }
+
+    if (tok->kind == TK_IDENT) {
+        Node *node = new_var_node(*tok->loc);
+        *rest = tok->next;
         return node;
     }
 
@@ -142,12 +172,13 @@ Node *primary(Token **rest, Token *tok) {
         return node;
     }
 
-    error_tok(tok, "式が不正です");
+    error_tok(tok, "expected an expression");
 }
 
 Node *parse(Token *tok) {
-    Node *node = expr(&tok, tok);
-    if (tok->kind != TK_EOF)
-        error_tok(tok, "予期しないトークンです");
-    return node;
+    Node head = {};
+    Node *cur = &head;
+    while (tok->kind != TK_EOF)
+        cur = cur->next = stmt(&tok, tok);
+    return head.next;
 }

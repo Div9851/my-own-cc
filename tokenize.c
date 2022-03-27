@@ -32,20 +32,17 @@ void error_tok(Token *tok, char *fmt, ...) {
     verror_at(tok->loc, fmt, ap);
 }
 
-// トークンが`op`と等しいか判定する
 bool equal(Token *tok, char *op) {
-    return tok->kind == TK_RESERVED && strncmp(tok->loc, op, tok->len) == 0;
+    return strncmp(tok->loc, op, tok->len) == 0 && op[tok->len] == '\0';
 }
 
-// トークンが`op`と等しい場合、次のトークンを返す
-// それ以外の場合にはエラーを報告する
-Token *consume(Token *tok, char *op) {
+Token *skip(Token *tok, char *op) {
     if (!equal(tok, op))
-        error_at(tok->loc, "'%c'ではありません", op);
+        error_at(tok->loc, "expected '%s'", op);
     return tok->next;
 }
 
-// 新しいトークンを作成する
+// Create a new token
 Token *new_token(TokenKind kind, char *start, char *end) {
     Token *tok = calloc(1, sizeof(Token));
     tok->kind = kind;
@@ -56,33 +53,28 @@ Token *new_token(TokenKind kind, char *start, char *end) {
 
 bool startswith(char *p, char *q) { return strncmp(p, q, strlen(q)) == 0; }
 
-// 入力文字列pをトークナイズしてそれを返す
+// Read a punctuator token from p and returns its length
+int read_punct(char *p) {
+    if (startswith(p, "==") || startswith(p, "!=") || startswith(p, "<=") ||
+        startswith(p, ">="))
+        return 2;
+    return ispunct(*p) ? 1 : 0;
+}
+
+// Tokenize `p` and returns new tokens
 Token *tokenize(char *p) {
     current_input = p;
-    Token head;
-    head.next = NULL;
+    Token head = {};
     Token *cur = &head;
 
     while (*p) {
-        // 空白文字をスキップ
+        // Skip whitespace characters
         if (isspace(*p)) {
             p++;
             continue;
         }
 
-        if (startswith(p, "==") || startswith(p, "!=") || startswith(p, "<=") ||
-            startswith(p, ">=")) {
-            cur = cur->next = new_token(TK_RESERVED, p, p + 2);
-            p += 2;
-            continue;
-        }
-
-        if (strchr("+-*/()<>", *p)) {
-            cur = cur->next = new_token(TK_RESERVED, p, p + 1);
-            p++;
-            continue;
-        }
-
+        // Numeric literal
         if (isdigit(*p)) {
             cur = cur->next = new_token(TK_NUM, p, p);
             char *q = p;
@@ -91,7 +83,22 @@ Token *tokenize(char *p) {
             continue;
         }
 
-        error_at(p, "トークナイズできません");
+        // Identifier
+        if ('a' <= *p && *p <= 'z') {
+            cur = cur->next = new_token(TK_IDENT, p, p + 1);
+            p++;
+            continue;
+        }
+
+        // Punctuators
+        int punct_len = read_punct(p);
+        if (punct_len) {
+            cur = cur->next = new_token(TK_PUNCT, p, p + punct_len);
+            p += cur->len;
+            continue;
+        }
+
+        error_at(p, "invalid token");
     }
 
     cur = cur->next = new_token(TK_EOF, p, p);
