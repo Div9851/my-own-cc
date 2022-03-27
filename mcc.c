@@ -93,6 +93,8 @@ Token *new_token(TokenKind kind, Token *cur, char *str, int len) {
     return tok;
 }
 
+bool startswith(char *p, char *q) { return memcmp(p, q, strlen(q)) == 0; }
+
 // 入力文字列pをトークナイズしてそれを返す
 Token *tokenize() {
     char *p = user_input;
@@ -104,6 +106,12 @@ Token *tokenize() {
         // 空白文字をスキップ
         if (isspace(*p)) {
             p++;
+            continue;
+        }
+
+        if (startswith(p, "==") || startswith(p, "!=")) {
+            cur = new_token(TK_RESERVED, cur, p, 2);
+            p += 2;
             continue;
         }
 
@@ -132,6 +140,8 @@ typedef enum {
     ND_SUB, // -
     ND_MUL, // *
     ND_DIV, // /
+    ND_EQ,  // ==
+    ND_NE,  // !=
     ND_NUM, // 整数
 } NodeKind;
 
@@ -161,11 +171,28 @@ Node *new_node_num(int val) {
 }
 
 Node *expr();
+Node *equality();
+Node *add();
 Node *mul();
 Node *unary();
 Node *primary();
 
-Node *expr() {
+Node *expr() { return equality(); }
+
+Node *equality() {
+    Node *node = add();
+
+    for (;;) {
+        if (consume("=="))
+            node = new_node(ND_EQ, node, add());
+        else if (consume("!="))
+            node = new_node(ND_NE, node, add());
+        else
+            return node;
+    }
+}
+
+Node *add() {
     Node *node = mul();
 
     for (;;) {
@@ -236,6 +263,16 @@ void gen(Node *node) {
     case ND_DIV:
         printf("    cqo\n");
         printf("    idiv rdi\n");
+        break;
+    case ND_EQ:
+        printf("    cmp rax, rdi\n");
+        printf("    sete al\n");
+        printf("    movzb rax, al\n");
+        break;
+    case ND_NE:
+        printf("    cmp rax, rdi\n");
+        printf("    setne al\n");
+        printf("    movzb rax, al\n");
         break;
     }
 
