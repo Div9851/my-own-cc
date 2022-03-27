@@ -14,8 +14,7 @@ void pop(char *arg) {
 
 void gen_addr(Node *node) {
     if (node->kind == ND_VAR) {
-        int offset = (node->name - 'a' + 1) * 8;
-        printf("    lea rax, [rbp - %d]\n", offset);
+        printf("    lea rax, [rbp - %d]\n", node->var->offset);
         return;
     }
 
@@ -97,7 +96,19 @@ void gen_stmt(Node *node) {
     error("invalid statement");
 }
 
+// Assign offsets to local variables
+int assign_lvar_offsets() {
+    int offset = 0;
+    for (Obj *var = locals; var; var = var->next) {
+        offset += 8;
+        var->offset = offset;
+    }
+    return offset;
+}
+
 void codegen(Node *node) {
+    int stack_size = assign_lvar_offsets();
+
     printf(".intel_syntax noprefix\n");
     printf(".globl main\n");
     printf("main:\n");
@@ -105,7 +116,7 @@ void codegen(Node *node) {
     // Prologue
     printf("    push rbp\n");
     printf("    mov rbp, rsp\n");
-    printf("    sub rsp, 208\n");
+    printf("    sub rsp, %d\n", stack_size);
 
     for (Node *n = node; n; n = n->next) {
         gen_stmt(n);

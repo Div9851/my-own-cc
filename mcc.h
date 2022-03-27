@@ -38,6 +38,15 @@ Token *tokenize(char *input);
 // parser.c
 //
 
+// Local variable
+typedef struct Obj Obj;
+struct Obj {
+    Obj *next;
+    char *name; // Variable name
+    int offset; // Offset from RBP
+};
+
+// AST node
 typedef enum {
     ND_ADD,       // +
     ND_SUB,       // -
@@ -61,9 +70,11 @@ struct Node {
     Node *next;    // Next node
     Node *lhs;     // Left-hand side
     Node *rhs;     // Right-hand side
-    char name;     // Used if kind == ND_VAR
+    Obj *var;      // Used if kind == ND_VAR
     int val;       // Used if kind == ND_NUM
 };
+
+extern Obj *locals;
 
 Node *parse(Token *tok);
 

@@ -1,5 +1,9 @@
 #include "mcc.h"
 
+// All local variable instances created during parsing are
+// accumulated to this list
+Obj *locals;
+
 Node *expr(Token **rest, Token *tok);
 Node *expr_stmt(Token **rest, Token *tok);
 Node *assign(Token **rest, Token *tok);
@@ -9,6 +13,15 @@ Node *add(Token **rest, Token *tok);
 Node *mul(Token **rest, Token *tok);
 Node *unary(Token **rest, Token *tok);
 Node *primary(Token **rest, Token *tok);
+
+// Find a local variable by name
+Obj *find_var(Token *tok) {
+    for (Obj *var = locals; var; var = var->next)
+        if (strncmp(var->name, tok->loc, tok->len) == 0 &&
+            var->name[tok->len] == '\0')
+            return var;
+    return NULL;
+}
 
 Node *new_node(NodeKind kind) {
     Node *node = calloc(1, sizeof(Node));
@@ -35,10 +48,18 @@ Node *new_num(int val) {
     return node;
 }
 
-Node *new_var_node(char name) {
+Node *new_var_node(Obj *var) {
     Node *node = new_node(ND_VAR);
-    node->name = name;
+    node->var = var;
     return node;
+}
+
+Obj *new_lvar(char *name) {
+    Obj *var = calloc(1, sizeof(Obj));
+    var->name = name;
+    var->next = locals;
+    locals = var;
+    return var;
 }
 
 Node *stmt(Token **rest, Token *tok) { return expr_stmt(rest, tok); }
@@ -161,9 +182,15 @@ Node *primary(Token **rest, Token *tok) {
     }
 
     if (tok->kind == TK_IDENT) {
-        Node *node = new_var_node(*tok->loc);
+        Obj *var = find_var(tok);
+        if (!var) {
+            char *buf = malloc(tok->len + 1);
+            strncpy(buf, tok->loc, tok->len);
+            buf[tok->len] = '\0';
+            var = new_lvar(buf);
+        }
         *rest = tok->next;
-        return node;
+        return new_var_node(var);
     }
 
     if (tok->kind == TK_NUM) {

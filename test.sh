@@ -52,5 +52,8 @@ assert 3 "1; 2; 3;"
 assert 3 "a=3; a;"
 assert 8 "a=3; z=5; a+z;"
 assert 6 "a=b=3; a+b;"
+assert 3 "foo=3; foo;"
+assert 8 "foo123=3; _bar=5; foo123+_bar;"
+assert 8 "foo123=3; foo1234=5; foo123+foo1234;"
 
 echo OK
