@@ -54,6 +54,15 @@ struct Obj {
     int offset; // Offset from RBP
 };
 
+typedef struct Function Function;
+struct Function {
+    Function *next;
+    char *name;
+    Node *body;
+    Obj *locals;
+    int stack_size;
+};
+
 // AST node
 typedef enum {
     ND_ADD,       // +
@@ -108,7 +117,7 @@ struct Node {
 
 extern Obj *locals;
 
-Node *parse(Token *tok);
+Function *parse(Token *tok);
 
 //
 // type.c
@@ -117,12 +126,14 @@ Node *parse(Token *tok);
 typedef enum {
     TY_INT,
     TY_PTR,
+    TY_FUNC,
 } TypeKind;
 
 struct Type {
     TypeKind kind;
     Type *base;
     Token *name;
+    Type *return_ty;
 };
 
 extern Type *ty_int;
@@ -130,10 +141,11 @@ extern Type *ty_int;
 bool is_integer(Type *ty);
 bool is_pointer(Type *ty);
 Type *pointer_to(Type *base);
+Type *func_type(Type *return_ty);
 void add_type(Node *node);
 
 //
 // codegen.c
 //
 
-void codegen(Node *node);
+void codegen(Function *prog);

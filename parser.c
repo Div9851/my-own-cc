@@ -4,6 +4,8 @@
 // accumulated to this list
 Obj *locals;
 
+Type *declspec(Token **rest, Token *tok);
+Type *declarator(Token **rest, Token *tok, Type *ty);
 Node *declaration(Token **rest, Token *tok);
 Node *compound_stmt(Token **rest, Token *tok);
 Node *stmt(Token **rest, Token *tok);
@@ -82,6 +84,15 @@ Type *declspec(Token **rest, Token *tok) {
     return ty_int;
 }
 
+Type *type_suffix(Token **rest, Token *tok, Type *ty) {
+    if (equal(tok, "(")) {
+        *rest = skip(tok->next, ")");
+        return func_type(ty);
+    }
+    *rest = tok;
+    return ty;
+}
+
 Type *declarator(Token **rest, Token *tok, Type *ty) {
     while (consume(&tok, tok, "*"))
         ty = pointer_to(ty);
@@ -89,8 +100,8 @@ Type *declarator(Token **rest, Token *tok, Type *ty) {
     if (tok->kind != TK_IDENT)
         error_tok(tok, "expected a variable name");
 
+    ty - type_suffix(rest, tok->next, ty);
     ty->name = tok;
-    *rest = tok->next;
     return ty;
 }
 
@@ -402,10 +413,25 @@ Node *primary(Token **rest, Token *tok) {
     error_tok(tok, "expected an expression");
 }
 
-Node *parse(Token *tok) {
-    Node head = {};
-    Node *cur = &head;
+Function *function(Token **rest, Token *tok) {
+    Type *ty = declspec(&tok, tok);
+    ty = declarator(&tok, tok, ty);
+
+    locals = NULL;
+
+    Function *fn = calloc(1, sizeof(Function));
+    fn->name = get_ident(ty->name);
+
+    tok = skip(tok, "{");
+    fn->body = compound_stmt(rest, tok);
+    fn->locals = locals;
+    return fn;
+}
+
+Function *parse(Token *tok) {
+    Function head = {};
+    Function *cur = &head;
     while (tok->kind != TK_EOF)
-        cur = cur->next = stmt(&tok, tok);
+        cur = cur->next = function(&tok, tok);
     return head.next;
 }
