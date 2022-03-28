@@ -79,36 +79,54 @@ char *get_ident(Token *tok) {
     return strndup(tok->loc, tok->len);
 }
 
+int get_number(Token *tok) {
+    if (tok->kind != TK_NUM)
+        error_tok(tok, "expected a number");
+    return tok->val;
+}
+
+// declspec = "int"
 Type *declspec(Token **rest, Token *tok) {
     *rest = skip(tok, "int");
     return ty_int;
 }
 
+// func-params = (param ("," param)*)? ")"
+Type *func_params(Token **rest, Token *tok, Type *ty) {
+    Type head = {};
+    Type *cur = &head;
+
+    while (!equal(tok, ")")) {
+        if (cur != &head)
+            tok = skip(tok, ",");
+        Type *basety = declspec(&tok, tok);
+        Type *ty = declarator(&tok, tok, basety);
+        cur = cur->next = copy_type(ty);
+    }
+    ty = func_type(ty);
+    ty->params = head.next;
+    *rest = tok->next;
+    return ty;
+}
+
+// type-suffix = "(" func-params
+//             | "[" num "]"
+//             | ε
 Type *type_suffix(Token **rest, Token *tok, Type *ty) {
-    if (equal(tok, "(")) {
-        tok = tok->next;
+    if (equal(tok, "("))
+        return func_params(rest, tok->next, ty);
 
-        Type head = {};
-        Type *cur = &head;
-
-        while (!equal(tok, ")")) {
-            if (cur != &head)
-                tok = skip(tok, ",");
-            Type *basety = declspec(&tok, tok);
-            Type *ty = declarator(&tok, tok, basety);
-            cur = cur->next = copy_type(ty);
-        }
-
-        ty = func_type(ty);
-        ty->params = head.next;
-        *rest = tok->next;
-        return ty;
+    if (equal(tok, "[")) {
+        int sz = get_number(tok->next);
+        *rest = skip(tok->next->next, "]");
+        return array_of(ty, sz);
     }
 
     *rest = tok;
     return ty;
 }
 
+// declarator = "*"* ident type-suffix
 Type *declarator(Token **rest, Token *tok, Type *ty) {
     while (consume(&tok, tok, "*"))
         ty = pointer_to(ty);
@@ -121,6 +139,8 @@ Type *declarator(Token **rest, Token *tok, Type *ty) {
     return ty;
 }
 
+// declaration =
+// declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
 Node *declaration(Token **rest, Token *tok) {
     Type *basety = declspec(&tok, tok);
 
@@ -150,6 +170,12 @@ Node *declaration(Token **rest, Token *tok) {
     return node;
 }
 
+// stmt = "return" expr ";"
+//      | "if" "(" expr ")" stmt ("else" stmt)?
+//      | "for" "(" expr-stmt expr? ";" expr? ")" stmt
+//      | "while" "(" expr ")" stmt
+//      | "{" compound-stmt
+//      | expr-stmt
 Node *stmt(Token **rest, Token *tok) {
     if (equal(tok, "return")) {
         Node *node = new_node(ND_RETURN, tok);
@@ -199,6 +225,7 @@ Node *stmt(Token **rest, Token *tok) {
     return expr_stmt(rest, tok);
 }
 
+// compound-stmt = (declaration | stmt)* "}"
 Node *compound_stmt(Token **rest, Token *tok) {
     Node head = {};
     Node *cur = &head;
@@ -214,6 +241,7 @@ Node *compound_stmt(Token **rest, Token *tok) {
     return node;
 }
 
+// expr-stmt = expr? ";"
 Node *expr_stmt(Token **rest, Token *tok) {
     if (equal(tok, ";")) {
         *rest = tok->next;
@@ -226,8 +254,10 @@ Node *expr_stmt(Token **rest, Token *tok) {
     return node;
 }
 
+// expr = assign
 Node *expr(Token **rest, Token *tok) { return assign(rest, tok); }
 
+// assign = equality ("=" assign)?
 Node *assign(Token **rest, Token *tok) {
     Node *node = equality(&tok, tok);
     if (equal(tok, "="))
@@ -236,6 +266,7 @@ Node *assign(Token **rest, Token *tok) {
     return node;
 }
 
+// equality = relational ("==" relational | "!=" relational)*
 Node *equality(Token **rest, Token *tok) {
     Node *node = relational(&tok, tok);
 
@@ -255,6 +286,7 @@ Node *equality(Token **rest, Token *tok) {
     }
 }
 
+// relational = add ("<" add | "<=" add | ">" add | ">=" add)
 Node *relational(Token **rest, Token *tok) {
     Node *node = add(&tok, tok);
 
@@ -289,20 +321,19 @@ Node *new_add(Node *lhs, Node *rhs, Token *tok) {
     if (is_integer(lhs->ty) && is_integer(rhs->ty))
         return new_binary(ND_ADD, lhs, rhs, tok);
 
+    if (lhs->ty->base && rhs->ty->base)
+        error_tok(tok, "invalid operands");
+
     // `num + ptr` to `ptr + num`
-    if (is_integer(lhs->ty) && is_pointer(rhs->ty)) {
+    if (!lhs->ty->base && rhs->ty->base) {
         Node *tmp = lhs;
         lhs = rhs;
         rhs = tmp;
     }
 
     // ptr + num
-    if (is_pointer(lhs->ty) && is_integer(rhs->ty)) {
-        rhs = new_binary(ND_MUL, rhs, new_num(8, tok), tok);
-        return new_binary(ND_ADD, lhs, rhs, tok);
-    }
-
-    error_tok(tok, "invalid operands");
+    rhs = new_binary(ND_MUL, rhs, new_num(lhs->ty->base->size, tok), tok);
+    return new_binary(ND_ADD, lhs, rhs, tok);
 }
 
 Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
@@ -311,22 +342,23 @@ Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
         return new_binary(ND_SUB, lhs, rhs, tok);
 
     // ptr - num
-    if (is_pointer(lhs->ty) && is_integer(rhs->ty)) {
-        rhs = new_binary(ND_MUL, rhs, new_num(8, tok), tok);
+    if (lhs->ty->base && is_integer(rhs->ty)) {
+        rhs = new_binary(ND_MUL, rhs, new_num(lhs->ty->base->size, tok), tok);
         Node *node = new_binary(ND_SUB, lhs, rhs, tok);
         return node;
     }
 
-    // ptr - ptr
-    if (is_pointer(lhs->ty) && is_pointer(rhs->ty)) {
+    // ptr - ptr, which returns how many elements are between the two
+    if (lhs->ty->base && rhs->ty->base) {
         Node *node = new_binary(ND_SUB, lhs, rhs, tok);
         node->ty = ty_int;
-        return new_binary(ND_DIV, node, new_num(8, tok), tok);
+        return new_binary(ND_DIV, node, new_num(lhs->ty->base->size, tok), tok);
     }
 
     error_tok(tok, "invalid operands");
 }
 
+// add = mul ("+" mul | "-" mul)*
 Node *add(Token **rest, Token *tok) {
     Node *node = mul(&tok, tok);
 
@@ -346,6 +378,7 @@ Node *add(Token **rest, Token *tok) {
     }
 }
 
+// mul = unary ("*" unary | "/" unary)*
 Node *mul(Token **rest, Token *tok) {
     Node *node = unary(&tok, tok);
 
@@ -363,6 +396,8 @@ Node *mul(Token **rest, Token *tok) {
     }
 }
 
+// unary = ("+" | "-" | "*" | "&") unary
+//       | primary
 Node *unary(Token **rest, Token *tok) {
     if (equal(tok, "+"))
         return unary(rest, tok->next);
@@ -379,6 +414,7 @@ Node *unary(Token **rest, Token *tok) {
     return primary(rest, tok);
 }
 
+// funcall = ident "(" (assign ("," assign)*)? ")"
 Node *funcall(Token **rest, Token *tok) {
     Token *start = tok;
     tok = tok->next->next;
@@ -401,6 +437,7 @@ Node *funcall(Token **rest, Token *tok) {
     return node;
 }
 
+// primary = "(" expr ")" | ident func-args? | num
 Node *primary(Token **rest, Token *tok) {
     if (equal(tok, "(")) {
         Node *node = expr(&tok, tok->next);
@@ -454,9 +491,11 @@ Function *function(Token **rest, Token *tok) {
     return fn;
 }
 
+// program = function-definition*
 Function *parse(Token *tok) {
     Function head = {};
     Function *cur = &head;
+
     while (tok->kind != TK_EOF)
         cur = cur->next = function(&tok, tok);
     return head.next;
