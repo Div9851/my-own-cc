@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct Type Type;
+typedef struct Node Node;
+
 //
 // tokenize.c
 //
@@ -71,10 +74,10 @@ typedef enum {
 } NodeKind;
 
 // AST node type
-typedef struct Node Node;
 struct Node {
     NodeKind kind; // Node kind
     Node *next;    // Next node
+    Type *ty;      // Type
     Token *tok;    // Representative token
 
     Node *lhs; // Left-hand side
@@ -97,6 +100,26 @@ struct Node {
 extern Obj *locals;
 
 Node *parse(Token *tok);
+
+//
+// type.c
+//
+
+typedef enum {
+    TY_INT,
+    TY_PTR,
+} TypeKind;
+
+struct Type {
+    TypeKind kind;
+    Type *base;
+};
+
+extern Type *ty_int;
+
+bool is_integer(Type *ty);
+bool is_pointer(Type *ty);
+void add_type(Node *node);
 
 //
 // codegen.c
