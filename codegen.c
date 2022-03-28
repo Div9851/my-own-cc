@@ -2,6 +2,8 @@
 
 int depth;
 
+void gen_expr(Node *node);
+
 int count() {
     static int i = 1;
     return i++;
@@ -18,8 +20,12 @@ void pop(char *arg) {
 }
 
 void gen_addr(Node *node) {
-    if (node->kind == ND_VAR) {
+    switch (node->kind) {
+    case ND_VAR:
         printf("    lea rax, [rbp - %d]\n", node->var->offset);
+        return;
+    case ND_DEREF:
+        gen_expr(node->lhs);
         return;
     }
 
@@ -38,6 +44,13 @@ void gen_expr(Node *node) {
     case ND_VAR:
         gen_addr(node);
         printf("    mov rax, [rax]\n");
+        return;
+    case ND_DEREF:
+        gen_expr(node->lhs);
+        printf("    mov rax, [rax]\n");
+        return;
+    case ND_ADDR:
+        gen_addr(node->lhs);
         return;
     case ND_ASSIGN:
         gen_addr(node->lhs);
