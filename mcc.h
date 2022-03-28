@@ -73,8 +73,10 @@ typedef struct Node Node;
 struct Node {
     NodeKind kind; // Node kind
     Node *next;    // Next node
-    Node *lhs;     // Left-hand side
-    Node *rhs;     // Right-hand side
+    Token *tok;    // Representative token
+
+    Node *lhs; // Left-hand side
+    Node *rhs; // Right-hand side
 
     // "if" or "for" statement
     Node *cond;
