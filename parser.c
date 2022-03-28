@@ -100,7 +100,7 @@ Type *declarator(Token **rest, Token *tok, Type *ty) {
     if (tok->kind != TK_IDENT)
         error_tok(tok, "expected a variable name");
 
-    ty - type_suffix(rest, tok->next, ty);
+    ty = type_suffix(rest, tok->next, ty);
     ty->name = tok;
     return ty;
 }
