@@ -89,6 +89,10 @@ void gen_expr(Node *node) {
 
 void gen_stmt(Node *node) {
     switch (node->kind) {
+    case ND_BLOCK:
+        for (Node *n = node->body; n; n = n->next)
+            gen_stmt(n);
+        return;
     case ND_RETURN:
         gen_expr(node->lhs);
         printf("    jmp .L.return\n");

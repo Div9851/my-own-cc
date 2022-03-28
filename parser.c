@@ -4,8 +4,10 @@
 // accumulated to this list
 Obj *locals;
 
-Node *expr(Token **rest, Token *tok);
+Node *stmt(Token **rest, Token *tok);
+Node *compound_stmt(Token **rest, Token *tok);
 Node *expr_stmt(Token **rest, Token *tok);
+Node *expr(Token **rest, Token *tok);
 Node *assign(Token **rest, Token *tok);
 Node *equality(Token **rest, Token *tok);
 Node *relational(Token **rest, Token *tok);
@@ -69,7 +71,22 @@ Node *stmt(Token **rest, Token *tok) {
         return node;
     }
 
+    if (equal(tok, "{"))
+        return compound_stmt(rest, tok->next);
+
     return expr_stmt(rest, tok);
+}
+
+Node *compound_stmt(Token **rest, Token *tok) {
+    Node head = {};
+    Node *cur = &head;
+    while (!equal(tok, "}"))
+        cur = cur->next = stmt(&tok, tok);
+
+    Node *node = new_node(ND_BLOCK);
+    node->body = head.next;
+    *rest = tok->next;
+    return node;
 }
 
 Node *expr_stmt(Token **rest, Token *tok) {
