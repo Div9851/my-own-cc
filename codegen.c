@@ -19,6 +19,8 @@ void pop(char *arg) {
     depth--;
 }
 
+int align_to(int n, int align) { return (n + align - 1) / align * align; }
+
 void gen_addr(Node *node) {
     switch (node->kind) {
     case ND_VAR:
@@ -58,6 +60,10 @@ void gen_expr(Node *node) {
         gen_expr(node->rhs);
         pop("rdi");
         printf("    mov [rdi], rax\n");
+        return;
+    case ND_FUNCALL:
+        printf("    mov rax, 0\n");
+        printf("    call %s\n", node->funcname);
         return;
     }
 
@@ -160,7 +166,7 @@ int assign_lvar_offsets() {
         offset += 8;
         var->offset = offset;
     }
-    return offset;
+    return align_to(offset, 16);
 }
 
 void codegen(Node *node) {

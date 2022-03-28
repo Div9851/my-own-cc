@@ -360,6 +360,15 @@ Node *primary(Token **rest, Token *tok) {
     }
 
     if (tok->kind == TK_IDENT) {
+        // Function call
+        if (equal(tok->next, "(")) {
+            Node *node = new_node(ND_FUNCALL, tok);
+            node->funcname = strndup(tok->loc, tok->len);
+            *rest = skip(tok->next->next, ")");
+            return node;
+        }
+
+        // Variable
         Obj *var = find_var(tok);
         if (!var)
             error_tok(tok, "undefined variable");
