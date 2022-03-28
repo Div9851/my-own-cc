@@ -32,14 +32,23 @@ void error_tok(Token *tok, char *fmt, ...) {
     verror_at(tok->loc, fmt, ap);
 }
 
-bool equal(Token *tok, char *op) {
-    return strncmp(tok->loc, op, tok->len) == 0 && op[tok->len] == '\0';
+bool equal(Token *tok, char *str) {
+    return strncmp(tok->loc, str, tok->len) == 0 && str[tok->len] == '\0';
 }
 
-Token *skip(Token *tok, char *op) {
-    if (!equal(tok, op))
-        error_at(tok->loc, "expected '%s'", op);
+Token *skip(Token *tok, char *str) {
+    if (!equal(tok, str))
+        error_at(tok->loc, "expected '%s'", str);
     return tok->next;
+}
+
+bool consume(Token **rest, Token *tok, char *str) {
+    if (equal(tok, str)) {
+        *rest = tok->next;
+        return true;
+    }
+    *rest = tok;
+    return false;
 }
 
 // Create a new token
@@ -70,7 +79,7 @@ int read_punct(char *p) {
 }
 
 bool is_keyword(Token *tok) {
-    static char *kw[] = {"return", "if", "else", "for", "while", NULL};
+    static char *kw[] = {"return", "if", "else", "for", "while", "int", NULL};
     for (int i = 0; kw[i]; i++)
         if (equal(tok, kw[i]))
             return true;

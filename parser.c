@@ -4,8 +4,9 @@
 // accumulated to this list
 Obj *locals;
 
-Node *stmt(Token **rest, Token *tok);
+Node *declaration(Token **rest, Token *tok);
 Node *compound_stmt(Token **rest, Token *tok);
+Node *stmt(Token **rest, Token *tok);
 Node *expr_stmt(Token **rest, Token *tok);
 Node *expr(Token **rest, Token *tok);
 Node *assign(Token **rest, Token *tok);
@@ -61,12 +62,65 @@ Node *new_var_node(Obj *var, Token *tok) {
     return node;
 }
 
-Obj *new_lvar(char *name) {
+Obj *new_lvar(char *name, Type *ty) {
     Obj *var = calloc(1, sizeof(Obj));
     var->name = name;
+    var->ty = ty;
     var->next = locals;
     locals = var;
     return var;
+}
+
+char *get_ident(Token *tok) {
+    if (tok->kind != TK_IDENT)
+        error_tok(tok, "expected an identifier");
+    return strndup(tok->loc, tok->len);
+}
+
+Type *declspec(Token **rest, Token *tok) {
+    *rest = skip(tok, "int");
+    return ty_int;
+}
+
+Type *declarator(Token **rest, Token *tok, Type *ty) {
+    while (consume(&tok, tok, "*"))
+        ty = pointer_to(ty);
+
+    if (tok->kind != TK_IDENT)
+        error_tok(tok, "expected a variable name");
+
+    ty->name = tok;
+    *rest = tok->next;
+    return ty;
+}
+
+Node *declaration(Token **rest, Token *tok) {
+    Type *basety = declspec(&tok, tok);
+
+    Node head = {};
+    Node *cur = &head;
+    int i = 0;
+
+    while (!equal(tok, ";")) {
+        if (i++ > 0)
+            tok = skip(tok, ",");
+
+        Type *ty = declarator(&tok, tok, basety);
+        Obj *var = new_lvar(get_ident(ty->name), ty);
+
+        if (!equal(tok, "="))
+            continue;
+
+        Node *lhs = new_var_node(var, ty->name);
+        Node *rhs = assign(&tok, tok->next);
+        Node *node = new_node(ND_EXPR_STMT, tok);
+        node->lhs = new_binary(ND_ASSIGN, lhs, rhs, tok);
+        cur = cur->next = node;
+    }
+    Node *node = new_node(ND_BLOCK, tok);
+    node->body = head.next;
+    *rest = tok->next;
+    return node;
 }
 
 Node *stmt(Token **rest, Token *tok) {
@@ -121,9 +175,12 @@ Node *stmt(Token **rest, Token *tok) {
 Node *compound_stmt(Token **rest, Token *tok) {
     Node head = {};
     Node *cur = &head;
-    while (!equal(tok, "}"))
-        cur = cur->next = stmt(&tok, tok);
-
+    while (!equal(tok, "}")) {
+        if (equal(tok, "int"))
+            cur = cur->next = declaration(&tok, tok);
+        else
+            cur = cur->next = stmt(&tok, tok);
+    }
     Node *node = new_node(ND_BLOCK, tok);
     node->body = head.next;
     *rest = tok->next;
@@ -304,12 +361,8 @@ Node *primary(Token **rest, Token *tok) {
 
     if (tok->kind == TK_IDENT) {
         Obj *var = find_var(tok);
-        if (!var) {
-            char *buf = malloc(tok->len + 1);
-            strncpy(buf, tok->loc, tok->len);
-            buf[tok->len] = '\0';
-            var = new_lvar(buf);
-        }
+        if (!var)
+            error_tok(tok, "undefined variable");
         *rest = tok->next;
         return new_var_node(var, tok);
     }

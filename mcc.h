@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <assert.h>
 #include <ctype.h>
 #include <stdarg.h>
@@ -34,8 +36,9 @@ struct Token {
 void error(char *fmt, ...);
 void error_at(char *loc, char *fmt, ...);
 void error_tok(Token *tok, char *fmt, ...);
-bool equal(Token *tok, char *op);
-Token *skip(Token *tok, char *op);
+bool equal(Token *tok, char *str);
+Token *skip(Token *tok, char *str);
+bool consume(Token **rest, Token *tok, char *str);
 Token *tokenize(char *input);
 
 //
@@ -47,6 +50,7 @@ typedef struct Obj Obj;
 struct Obj {
     Obj *next;
     char *name; // Variable name
+    Type *ty;   // Type
     int offset; // Offset from RBP
 };
 
@@ -113,12 +117,14 @@ typedef enum {
 struct Type {
     TypeKind kind;
     Type *base;
+    Token *name;
 };
 
 extern Type *ty_int;
 
 bool is_integer(Type *ty);
 bool is_pointer(Type *ty);
+Type *pointer_to(Type *base);
 void add_type(Node *node);
 
 //
