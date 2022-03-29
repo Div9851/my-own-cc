@@ -206,4 +206,8 @@ assert 119 'int main() { return "\x77"[0]; }'
 assert 165 'int main() { return "\xA5"[0]; }'
 assert 255 'int main() { return "\x00ff"[0]; }'
 
+assert 2 'int main() { /* return 1; */ return 2; }'
+assert 2 'int main() { // return 1;
+return 2; }'
+
 echo OK
