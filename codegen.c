@@ -26,7 +26,13 @@ int align_to(int n, int align) { return (n + align - 1) / align * align; }
 void gen_addr(Node *node) {
     switch (node->kind) {
     case ND_VAR:
-        printf("    lea rax, [rbp - %d]\n", node->var->offset);
+        if (node->var->is_local) {
+            // Local variable
+            printf("    lea rax, [rbp - %d]\n", node->var->offset);
+        } else {
+            // Global variable
+            printf("    lea rax, %s[rip]\n", node->var->name);
+        }
         return;
     case ND_DEREF:
         gen_expr(node->lhs);
@@ -204,15 +210,24 @@ void assign_lvar_offsets(Obj *prog) {
     }
 }
 
-void codegen(Obj *prog) {
-    assign_lvar_offsets(prog);
+void emit_data(Obj *prog) {
+    for (Obj *var = prog; var; var = var->next) {
+        if (var->is_function)
+            continue;
 
-    printf(".intel_syntax noprefix\n");
+        printf("    .data\n");
+        printf("    .globl %s\n", var->name);
+        printf("%s:\n", var->name);
+        printf("    .zero %d\n", var->ty->size);
+    }
+}
+
+void emit_text(Obj *prog) {
     for (Obj *fn = prog; fn; fn = fn->next) {
         if (!fn->is_function)
             continue;
-
-        printf(".globl %s\n", fn->name);
+        printf("    .globl %s\n", fn->name);
+        printf("    .text\n");
         printf("%s:\n", fn->name);
         current_fn = fn;
 
@@ -225,12 +240,21 @@ void codegen(Obj *prog) {
         for (Obj *var = fn->params; var; var = var->next)
             printf("    mov [rbp - %d], %s\n", var->offset, argreg[i++]);
 
+        // Emit code
         gen_stmt(fn->body);
         assert(depth == 0);
 
+        // Epilogue
         printf(".L.return.%s:\n", fn->name);
         printf("    mov rsp, rbp\n");
         printf("    pop rbp\n");
         printf("    ret\n");
     }
+}
+
+void codegen(Obj *prog) {
+    assign_lvar_offsets(prog);
+    printf(".intel_syntax noprefix\n");
+    emit_data(prog);
+    emit_text(prog);
 }
