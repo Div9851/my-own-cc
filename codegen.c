@@ -1,7 +1,8 @@
 #include "mcc.h"
 
 static int depth;
-static char *argreg[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+static char *argreg8[] = {"dil", "sil", "dl", "cl", "r8b", "r9b"};
+static char *argreg64[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 static Obj *current_fn;
 
 void gen_expr(Node *node);
@@ -54,13 +55,20 @@ void load(Type *ty) {
         return;
     }
 
-    printf("    mov rax, [rax]\n");
+    if (ty->size == 1)
+        printf("    movsx rax, BYTE PTR [rax]\n");
+    else
+        printf("    mov rax, [rax]\n");
 }
 
 // Store rax to an address that stack top is pointing to
-void store() {
+void store(Type *ty) {
     pop("rdi");
-    printf("    mov [rdi], rax\n");
+
+    if (ty->size == 1)
+        printf("    mov [rdi], al\n");
+    else
+        printf("    mov [rdi], rax\n");
 }
 
 void gen_expr(Node *node) {
@@ -87,7 +95,7 @@ void gen_expr(Node *node) {
         gen_addr(node->lhs);
         push();
         gen_expr(node->rhs);
-        store();
+        store(node->ty);
         return;
     case ND_FUNCALL: {
         int nargs = 0;
@@ -98,7 +106,7 @@ void gen_expr(Node *node) {
         }
 
         for (int i = nargs - 1; i >= 0; i--)
-            pop(argreg[i]);
+            pop(argreg64[i]);
 
         printf("    mov rax, 0\n");
         printf("    call %s\n", node->funcname);
@@ -237,8 +245,12 @@ void emit_text(Obj *prog) {
         printf("    sub rsp, %d\n", fn->stack_size);
 
         int i = 0;
-        for (Obj *var = fn->params; var; var = var->next)
-            printf("    mov [rbp - %d], %s\n", var->offset, argreg[i++]);
+        for (Obj *var = fn->params; var; var = var->next) {
+            if (var->ty->size == 1)
+                printf("    mov [rbp - %d], %s\n", var->offset, argreg8[i++]);
+            else
+                printf("    mov [rbp - %d], %s\n", var->offset, argreg64[i++]);
+        }
 
         // Emit code
         gen_stmt(fn->body);
